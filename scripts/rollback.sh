@@ -21,3 +21,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 "${SCRIPT_DIR}/deploy.sh" "${PREV_TAG}"
 
 echo "✓ Rollback to ${PREV_TAG} completed successfully."
+

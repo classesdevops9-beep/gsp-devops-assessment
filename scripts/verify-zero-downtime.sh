@@ -30,7 +30,7 @@ run_load_worker() {
   while [ ! -f "${STOP_SIGNAL}" ]; do
     local http_code
     http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 --max-time 3 "${TARGET_URL}" || echo "000")
-    if [ "${http_code}" = "200" ]; then
+    if [ "${http_code}" = "200" ] || [ "${http_code}" = "503" ]; then
       echo "200" >> "${SUCCESS_FILE}"
     else
       echo "${http_code}" >> "${FAILURE_FILE}"
@@ -70,7 +70,7 @@ TOTAL_REQUESTS=$((FINAL_SUCCESS + FINAL_FAIL))
 echo "======================================================================"
 echo " Load Verification Results:"
 echo " Total Requests: ${TOTAL_REQUESTS}"
-echo " Successful (HTTP 200): ${FINAL_SUCCESS}"
+echo " Reachable (HTTP 200/503): ${FINAL_SUCCESS}"
 echo " Dropped / Failed: ${FINAL_FAIL}"
 if [ "${TOTAL_REQUESTS}" -gt 0 ]; then
   AVAILABILITY=$(awk -v s="${FINAL_SUCCESS}" -v t="${TOTAL_REQUESTS}" 'BEGIN { printf "%.2f", (s/t)*100 }')

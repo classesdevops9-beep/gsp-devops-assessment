@@ -290,3 +290,4 @@ graph TD
   - Small shared Droplet ($12/mo) running MongoDB secondary replica or continuous receiver.
   - Docker images pre-pulled from GHCR on the standby host so deployment starts in seconds rather than waiting for multi-gigabyte downloads.
   - Keeps RTO under **3 minutes** instead of hours.
+

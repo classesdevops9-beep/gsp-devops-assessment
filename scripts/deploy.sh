@@ -71,3 +71,4 @@ docker compose -f "${COMPOSE_FILE}" exec -T nginx nginx -s reload || true
 echo "======================================================================"
 echo "✓ Zero-downtime deployment of tag [${NEW_TAG}] COMPLETED SUCCESSFULLY!"
 echo "======================================================================"
+

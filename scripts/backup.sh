@@ -107,3 +107,4 @@ echo " Backup finished successfully!"
 echo " Encrypted Archive: ${ENCRYPTED_PATH}"
 echo " SHA256: $(shasum -a 256 "${ENCRYPTED_PATH}" | cut -d' ' -f1)"
 echo "======================================================================"
+

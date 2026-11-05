@@ -52,11 +52,10 @@ USER conduit
 # Expose internal application port
 EXPOSE 3000
 
-# Container healthcheck targeting /health endpoint
-HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:3000/health || exit 1
+# A 503 means the app is responding but MongoDB is not ready yet.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/health | grep -Eq '^(200|503)$'
 
 # Execute app via dumb-init for graceful shutdown signal propagation (SIGTERM/SIGINT)
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["node", "bin/www"]
-

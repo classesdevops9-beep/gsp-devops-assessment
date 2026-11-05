@@ -61,7 +61,7 @@ flowchart TD
    - Uses `dumb-init` for proper signal handling (`SIGTERM` / `SIGINT`).
 2. **MongoDB Least Privilege:**
    - Root credentials (`admin`) are reserved exclusively for administrative tasks and encrypted backup dumps.
-   - Application containers connect using `conduit_user` initialized via `mongo-init/01-init-app-user.js`, granted solely `readWrite` access to the `conduit` database. It has **no cluster access, no user admin rights, and no access to the `admin` database**.
+   - Application containers connect using the user initialized by `mongo-init/01-init-app-user.sh` from `APP_MONGO_USER`, `APP_MONGO_PASSWORD`, and `APP_MONGO_DB`. The user is granted solely `readWrite` access to the application database, with **no cluster access, no user admin rights, and no access to the `admin` database**.
 3. **Secret Hygiene:**
    - Secrets are managed via `.env` (gitignored). Only `.env.example` is committed.
    - Zero hardcoded passwords or private keys in Git history.
@@ -269,9 +269,11 @@ Accessible at `http://<host>:8080/health`. Returns HTTP 200 when healthy, or HTT
 }
 ```
 
+Docker healthchecks accept both 200 and 503 so an app that is responding while MongoDB connects is not mistaken for a stopped process. HTTP 503 remains a degraded readiness state; the health monitor alerts and fails on it by default. CI may use `--allow-degraded` during startup.
+
 ### Webhook Alert Dispatcher (`scripts/health-monitor.sh`)
 - Scheduled via cron or GitHub Actions.
-- When `/health` returns non-200 or times out, it posts an alert payload to Slack or Discord.
+- When `/health` returns HTTP 503, another non-200 status, or times out, it reports degraded/unavailable health and posts an alert payload to Slack or Discord.
 
 ```bash
 # Test alert dispatch simulation

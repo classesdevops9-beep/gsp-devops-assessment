@@ -12,10 +12,10 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin_secret_pass}
-      MONGO_INITDB_DATABASE: conduit
+      MONGO_INITDB_DATABASE: ${APP_MONGO_DB:-conduit}
       APP_MONGO_USER: ${APP_MONGO_USER:-conduit_user}
       APP_MONGO_PASSWORD: ${APP_MONGO_PASSWORD:-conduit_secure_password}
-      APP_MONGO_DB: conduit
+      APP_MONGO_DB: ${APP_MONGO_DB:-conduit}
     volumes:
       - mongo_data:/data/db
       - ./mongo-init:/docker-entrypoint-initdb.d:ro
@@ -46,7 +46,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       APP_VERSION: ${IMAGE_TAG:-v1.0.0}
-      MONGODB_URI: mongodb://${APP_MONGO_USER:-conduit_user}:${APP_MONGO_PASSWORD:-conduit_secure_password}@mongo:27017/conduit?authSource=conduit
+      MONGODB_URI: ${MONGODB_URI:-mongodb://${APP_MONGO_USER:-conduit_user}:${APP_MONGO_PASSWORD:-conduit_secure_password}@mongo:27017/${APP_MONGO_DB:-conduit}?authSource=${APP_MONGO_DB:-conduit}}
       SECRET: ${JWT_SECRET:-production_jwt_secret_token}
     depends_on:
       mongo:
@@ -54,11 +54,11 @@ services:
     networks:
       - backend_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/health | grep -Eq '^(200|503)$'"]
       interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # ---------------------------------------------------------------------------
   # Application Replica 2 (Green)
@@ -74,7 +74,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       APP_VERSION: ${IMAGE_TAG:-v1.0.0}
-      MONGODB_URI: mongodb://${APP_MONGO_USER:-conduit_user}:${APP_MONGO_PASSWORD:-conduit_secure_password}@mongo:27017/conduit?authSource=conduit
+      MONGODB_URI: ${MONGODB_URI:-mongodb://${APP_MONGO_USER:-conduit_user}:${APP_MONGO_PASSWORD:-conduit_secure_password}@mongo:27017/${APP_MONGO_DB:-conduit}?authSource=${APP_MONGO_DB:-conduit}}
       SECRET: ${JWT_SECRET:-production_jwt_secret_token}
     depends_on:
       mongo:
@@ -82,11 +82,11 @@ services:
     networks:
       - backend_net
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sS -o /dev/null -w '%{http_code}' http://localhost:3000/health | grep -Eq '^(200|503)$'"]
       interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   # ---------------------------------------------------------------------------
   # Reverse Proxy & Load Balancer (Nginx)
