@@ -158,4 +158,7 @@ jobs:
 
       - name: Teardown Test Stack
         if: always()
-        run: docker compose down -v
+        run: |
+          docker compose logs --tail=50 || true
+          docker compose down -v
+

@@ -43,6 +43,7 @@ COPY --chown=conduit:conduit controllers ./controllers
 COPY --chown=conduit:conduit middlewares ./middlewares
 COPY --chown=conduit:conduit models ./models
 COPY --chown=conduit:conduit routes ./routes
+COPY --chown=conduit:conduit utils ./utils
 COPY --chown=conduit:conduit swagger.json ./
 
 # Switch to non-root user
@@ -58,3 +59,4 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
 # Execute app via dumb-init for graceful shutdown signal propagation (SIGTERM/SIGINT)
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["node", "bin/www"]
+
