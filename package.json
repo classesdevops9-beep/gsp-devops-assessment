@@ -1,0 +1,43 @@
+{
+  "name": "node-express-realworld-conduit",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www",
+    "dev": "DEBUG=app,app:* nodemon ./bin/www",
+    "create-env": "printenv > .env",
+    "test": "node tests/health.test.js",
+    "test:api": "NODE_ENV=test newman run ./tests/api-tests.postman.json -e ./tests/env-api-tests.postman.json",
+    "lint": "eslint app.js routes/ models/ controllers/ config/"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "debug": "~2.6.9",
+    "dotenv": "^8.1.0",
+    "errorhandler": "^1.5.1",
+    "express": "~4.16.1",
+    "express-jwt": "^5.3.1",
+    "helmet": "^3.21.0",
+    "jsonwebtoken": "^9.0.3",
+    "jwa": "^2.0.1",
+    "mongoose": "^5.7.5",
+    "mongoose-unique-validator": "^2.0.3",
+    "morgan": "~1.9.1",
+    "passport": "^0.4.0",
+    "passport-local": "^1.0.0",
+    "slug": "^1.1.0",
+    "swagger-ui-express": "^4.0.7",
+    "uuid": "^3.3.3"
+  },
+  "devDependencies": {
+    "eslint": "^6.3.0",
+    "eslint-config-standard": "^14.1.0",
+    "eslint-plugin-import": "^2.18.2",
+    "eslint-plugin-node": "^10.0.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-standard": "^4.0.1",
+    "newman": "^4.5.4",
+    "nodemon": "^1.19.2"
+  }
+}

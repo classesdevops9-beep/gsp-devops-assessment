@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # Database Service (MongoDB with Mandatory Authentication & Least Privilege)
+  # ---------------------------------------------------------------------------
+  mongo:
+    image: mongo:6.0
+    container_name: conduit-mongo
+    command: ["--auth"]
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin_secret_pass}
+      MONGO_INITDB_DATABASE: conduit
+      APP_MONGO_USER: ${APP_MONGO_USER:-conduit_user}
+      APP_MONGO_PASSWORD: ${APP_MONGO_PASSWORD:-conduit_secure_password}
+      APP_MONGO_DB: conduit
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend_net
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet -u $${MONGO_INITDB_ROOT_USERNAME} -p $${MONGO_INITDB_ROOT_PASSWORD}
+          --authenticationDatabase admin --eval 'db.adminCommand("ping")' >/dev/null 2>&1 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Application Replica 1 (Blue)
+  # ---------------------------------------------------------------------------
+  app-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${IMAGE_NAME:-conduit-api}:${IMAGE_TAG:-latest}
+    container_name: conduit-app-blue
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      APP_VERSION: ${IMAGE_TAG:-v1.0.0}
+      MONGODB_URI: mongodb://${APP_MONGO_USER:-conduit_user}:${APP_MONGO_PASSWORD:-conduit_secure_password}@mongo:27017/conduit?authSource=conduit
+      SECRET: ${JWT_SECRET:-production_jwt_secret_token}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Application Replica 2 (Green)
+  # ---------------------------------------------------------------------------
+  app-green:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${IMAGE_NAME:-conduit-api}:${IMAGE_TAG:-latest}
+    container_name: conduit-app-green
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      APP_VERSION: ${IMAGE_TAG:-v1.0.0}
+      MONGODB_URI: mongodb://${APP_MONGO_USER:-conduit_user}:${APP_MONGO_PASSWORD:-conduit_secure_password}@mongo:27017/conduit?authSource=conduit
+      SECRET: ${JWT_SECRET:-production_jwt_secret_token}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Reverse Proxy & Load Balancer (Nginx)
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: conduit-nginx
+    restart: unless-stopped
+    ports:
+      - "${HOST_PORT:-8080}:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      app-blue:
+        condition: service_healthy
+      app-green:
+        condition: service_healthy
+    networks:
+      - backend_net
+
+networks:
+  backend_net:
+    driver: bridge
+
+volumes:
+  mongo_data:
+    driver: local

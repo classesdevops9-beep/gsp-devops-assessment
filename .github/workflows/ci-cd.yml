@@ -1,0 +1,161 @@
+name: CI/CD Pipeline & Zero-Downtime Deployment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  schedule:
+    # Daily automated backup & health audit at 02:00 UTC
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/conduit-api
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Job 1: Linting & Unit/Integration Quality Gate
+  # ----------------------------------------------------------------------------
+  code-quality:
+    name: Lint & Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Static Code Analysis (ESLint)
+        run: npm run lint
+
+      - name: Model & Health Endpoint Unit Tests
+        run: npm test
+
+  # ----------------------------------------------------------------------------
+  # Job 2: Multi-Stage Container Build & Push to GHCR
+  # ----------------------------------------------------------------------------
+  build-and-publish:
+    name: Docker Build & Push (GHCR)
+    needs: code-quality
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker Metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ----------------------------------------------------------------------------
+  # Job 3: Zero-Downtime Deployment & Verification Drill
+  # ----------------------------------------------------------------------------
+  deploy-and-verify:
+    name: Zero-Downtime Deploy & Drill
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Age Encryption & Mongo Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y age bsdmainutils curl
+          wget -q https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.9.4.deb
+          sudo dpkg -i mongodb-database-tools-ubuntu2204-x86_64-100.9.4.deb || sudo apt-get install -f -y
+
+      - name: Setup Environment Files & Age Keys
+        run: |
+          cp .env.example .env
+          mkdir -p keys backups/local backups/offsite_storage
+          age-keygen -o keys/age.key
+          age-keygen -y keys/age.key > keys/age.pub
+          echo "AGE_RECIPIENT_KEY=$(cat keys/age.pub)" >> .env
+          echo "IMAGE_TAG=${{ github.sha }}" >> .env
+          chmod +x scripts/*.sh
+
+      - name: Bootstrap Multi-Container Stack (MongoDB + App Blue/Green + Nginx)
+        run: |
+          docker compose up -d --build
+          sleep 10
+          docker compose ps
+
+      - name: Verify Nginx Routing & Health Probe
+        run: |
+          echo "Testing initial health..."
+          for i in {1..15}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✓ Application reachable through Nginx on port 8080 (HTTP 200)"
+              break
+            fi
+            echo "Waiting for stack initialization (Attempt $i)..."
+            sleep 3
+          done
+          curl -s http://localhost:8080/health
+
+      - name: Execute Zero-Downtime Deployment Verification
+        run: |
+          echo "Triggering continuous load verification while executing rolling deploy..."
+          ./scripts/verify-zero-downtime.sh "http://localhost:8080/health" 15 &
+          LOAD_PID=$!
+          
+          sleep 2
+          ./scripts/deploy.sh "${{ github.sha }}"
+          
+          wait $LOAD_PID
+          echo "✓ Zero-downtime deployment verified with 0 dropped requests!"
+
+      - name: Execute Backup & Restore DR Drill
+        run: |
+          ./scripts/drill.sh
+
+      - name: Run Health Monitoring & Alerting Check
+        run: |
+          ./scripts/health-monitor.sh
+          ./scripts/health-monitor.sh --test-alert
+
+      - name: Teardown Test Stack
+        if: always()
+        run: docker compose down -v
